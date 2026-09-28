@@ -1,0 +1,7 @@
+{
+  "name": "p2p-net",
+  "private": true,
+  "type": "module",
+  "description": "Мережевий шар і сервер для браузерних P2P-ігор з кімнатами",
+  "scripts": { "test": "node --test test/" }
+}

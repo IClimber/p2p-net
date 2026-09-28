@@ -1,0 +1,25 @@
+# p2p-net: сервер сигналізації (WebSocket). Код — /opt/p2p-net/signal.mjs (копія server/signal.mjs).
+[Unit]
+Description=p2p-net signaling server (WebSocket)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/p2p-net/signal.mjs
+Environment=NODE_PATH=/usr/share/nodejs
+Environment=P2P_HOST=127.0.0.1
+Environment=P2P_PORT=@@SIGNAL_PORT@@
+Environment=P2P_ORIGINS=@@ORIGINS@@
+Environment=P2P_TURN_URLS=turn:@@PUBLIC_IP@@:3478?transport=udp,turns:@@HOST@@:443?transport=tcp
+# секрет TURN (root, 600) systemd передає службі в $CREDENTIALS_DIRECTORY/turn-secret
+LoadCredential=turn-secret:/etc/p2p-net/turn-secret
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
