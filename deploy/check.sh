@@ -48,7 +48,7 @@ fi
 
 if [ "${1:-}" = --renew ]; then
   echo "Сертифікат"
-  certbot renew --dry-run --cert-name "$HOST" >/dev/null 2>&1 && ok "пробне продовження успішне" || bad "пробне продовження не вдалося (certbot renew --dry-run)"
+  certbot renew --dry-run --no-random-sleep-on-renew --cert-name "$HOST" >/dev/null 2>&1 && ok "пробне продовження успішне" || bad "пробне продовження не вдалося (certbot renew --dry-run)"
 fi
 
 [ $FAIL = 0 ] && echo "Усе працює" || { echo "Є проблеми"; exit 1; }

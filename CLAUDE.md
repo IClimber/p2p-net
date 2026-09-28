@@ -46,7 +46,9 @@
 
 ## Поточний стан
 - VPS 144.172.110.72 (Ubuntu 24.04), `wss://144-172-110-72.sslip.io/ws`, origins `https://iclimber.github.io`.
-- Станом на 28.09.2026 на VPS ще ручне встановлення Firefighters (`ff-signal`, `/etc/ff-turn`, сайт `ff-turn`, `turn.php` + `php8.3-fpm`); `deploy/install.sh --check` показує лише очікувані відмінності. Сертифікат отримано через `certbot --nginx` (renewal: authenticator і installer `nginx`, пакет `python3-certbot-nginx` встановлено).
+- Розгорнуто `deploy/install.sh` 28.09.2026 (клон — `/root/p2p-net`); ручне встановлення Firefighters (`ff-signal`, `/etc/ff-turn`, сайт `ff-turn`, `turn.php`) перенесено, копії — `/var/backups/p2p-net/20260928-200302/`; `php8.3-fpm` вимкнено (пакет лишився). `deploy/check.sh --renew` — усе зелене.
+- Сертифікат отримано ще через `certbot --nginx` (renewal: authenticator і installer `nginx`, пакет `python3-certbot-nginx` встановлено); пробне продовження з новим конфігом nginx проходить.
+- 961 МБ ОЗП без swap. Перший запуск `install.sh` завис: разом із Claude Code (~350 МБ), `certbot.service` і `fwupd-refresh` почалось витіснення кешу, `systemctl daemon-reload` тривав до 2 хв, упала D-Bus, сервер перезавантажили; повторний запуск скрипта довершив розгортання.
 
 ## Тестування
 - `node --test test/`: двійковий формат і протокол сервера (фейкові сокети).
