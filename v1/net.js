@@ -35,7 +35,7 @@
 
 // ================= Налаштування =================
 const PROTOCOL = 2;                  // версія протоколу з сервером сигналізації (див. server/signal.mjs)
-const WIRE = 1;                      // версія формату повідомлень між гравцями (входить у хеш версії)
+const WIRE = 2;                      // версія формату повідомлень між гравцями (входить у хеш версії)
 const LIVE_MS = 3000;                // гравця, від якого стільки не було повідомлень, не малюємо і не обираємо хостом
 const FORGET_MS = 30000;             // через скільки забуваємо непрямого гравця, що замовк
 const RESUME_GAP_MS = 2000;          // пауза таймерів, після якої вважаємо, що сторінку було заморожено
@@ -205,7 +205,8 @@ export function createNet(opts) {
   const INTERNAL = {
     hello: { schema: { v: 'u32', t: 'f64', a: 'bool', g: 'bool', n: ['str'] }, broadcast: true },
     bye: { schema: {}, broadcast: true },
-    clock: { schema: { ht: 'f64' }, broadcast: true },
+    tq: { schema: { c: 'f64' } },
+    clock: { schema: { c: 'f64', ht: 'f64' } },
     fwd: { schema: { k: 'u8', o: 'str', to: 'str', d: 'bytes' } },
   };
   const kinds = [], byName = new Map();
@@ -277,15 +278,25 @@ export function createNet(opts) {
   }
   const isHost = () => hostId() === selfId;
 
-  // Спільний час (для детермінованих подій, як машини). Хост розсилає свій sharedNow(), решта оцінює зсув.
+  // Спільний час (для детермінованих подій, як машини) — годинник хоста. Раз на секунду питаємо хоста (tq з нашим
+  // performance.now()), він відповідає своїм sharedNow(): зсув = ht + RTT/2 - Date.now(). З останніх вимірів беремо
+  // той, де RTT найменший: у ньому найменше черг і повторів, похибка — лише асиметрія шляху.
   // Новий хост зберігає свій зсув, тому при зміні хоста час не стрибає.
-  let clockOffset = 0, clockFrom = null;
+  let clockOffset = 0, clockFrom = null, clockAsked = -1e9;
   const clockSamples = [];
-  function sampleClock(ht, from) {
+  function askClock(host) {
+    clockAsked = performance.now();
+    send('tq', { c: clockAsked }, host);
+  }
+  function sampleClock(d, from) {
+    const rtt = performance.now() - d.c;
+    if (!(rtt >= 0 && rtt < 10000)) return;
     if (from !== clockFrom) { clockFrom = from; clockSamples.length = 0; }
-    clockSamples.push(ht - Date.now());          // = зсув - затримка, тому беремо максимум
+    clockSamples.push({ rtt, off: d.ht + rtt / 2 - Date.now() });
     if (clockSamples.length > 12) clockSamples.shift();
-    clockOffset = Math.max(...clockSamples);
+    let best = clockSamples[0];
+    for (const x of clockSamples) if (x.rtt < best.rtt) best = x;
+    clockOffset = best.off;
   }
   const sharedNow = () => Date.now() + clockOffset;
 
@@ -383,6 +394,7 @@ export function createNet(opts) {
         p.links = new Set(d.n.filter(isId).slice(0, 64));
         if (!(before && before.size === p.links.size && [...before].every(z => p.links.has(z)))) introduceTo(id);
       }
+      if (clockFrom !== id && id === hostId() && performance.now() - clockAsked > 500) askClock(id);   // новий хост — не чекаємо секунду
       onChange();
     },
     bye(d, id) {
@@ -393,8 +405,11 @@ export function createNet(opts) {
       onPeerGone(id);
       onChange();
     },
+    tq(d, id) {
+      send('clock', { c: d.c, ht: sharedNow() }, id);
+    },
     clock(d, id) {
-      if (id === hostId()) sampleClock(d.ht, id);
+      if (id === hostId()) sampleClock(d, id);
     },
   };
   function receive(k, body, from, relayed) {
@@ -444,7 +459,6 @@ export function createNet(opts) {
     p.direct = true;
     p.seen = performance.now();
     sendHello();                                                 // список сусідів змінився — усім
-    if (isHost()) send('clock', { ht: sharedNow() }, id);
     onPeerOpen(id);
     onChange();
   }
@@ -704,7 +718,8 @@ export function createNet(opts) {
       if (!p.direct && now - p.seen > FORGET_MS) { peers.delete(id); onPeerGone(id); }
     }
     if (tick % HELLO_EVERY === 0 && peers.size) sendHello();
-    if (links.size && isHost()) send('clock', { ht: sharedNow() });
+    const host = hostId();
+    if (host !== selfId && peers.has(host)) askClock(host);
     const live = liveCount();
     if (live !== lastLive) { lastLive = live; onChange(); }      // хтось зник без прощання
     if (serverDownSince !== null) onChange();                    // попередження про сервер з'являється із затримкою
